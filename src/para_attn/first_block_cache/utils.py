@@ -347,7 +347,6 @@ class CachedTransformerBlocks(torch.nn.Module):
         self.return_hidden_states_only = return_hidden_states_only
 
     def forward(self, hidden_states, encoder_hidden_states, *args, **kwargs):
-        mark_step_begin()
         original_hidden_states = hidden_states
         first_transformer_block = self.transformer_blocks[0]
         hidden_states = first_transformer_block(hidden_states, encoder_hidden_states, *args, **kwargs)
@@ -358,6 +357,7 @@ class CachedTransformerBlocks(torch.nn.Module):
         first_hidden_states_residual = hidden_states - original_hidden_states
         del original_hidden_states
 
+        mark_step_begin()
         can_use_cache = get_can_use_cache(
             first_hidden_states_residual,
             parallelized=self.transformer is not None and getattr(self.transformer, "_is_parallelized", False),
