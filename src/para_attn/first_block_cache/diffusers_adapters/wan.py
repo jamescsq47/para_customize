@@ -52,36 +52,28 @@ def apply_cache_on_pipe(
     pipe: DiffusionPipeline,
     *,
     shallow_patch: bool = False,
-    residual_diff_threshold=0.03,
-    downsample_factor=1,
-    slg_layers=None,
-    slg_start: float = 0.0,
-    slg_end: float = 0.1,
+    enable_alter_cache: bool = True,
     **kwargs,
 ):
     if not getattr(pipe, "_is_cached", False):
         original_call = pipe.__class__.__call__
 
         @functools.wraps(original_call)
-        def new_call(self, *args, **kwargs):
+        def new_call(self, *args, **kwargs_):
             num_inference_steps = kwargs.get("num_inference_steps", 50)
             with utils.cache_context(
                 utils.create_cache_context(
-                    residual_diff_threshold=residual_diff_threshold,
-                    downsample_factor=downsample_factor,
-                    enable_alter_cache=True,
-                    slg_layers=slg_layers,
-                    slg_start=slg_start,
-                    slg_end=slg_end,
+                    enable_alter_cache=enable_alter_cache,
                     num_inference_steps=num_inference_steps,
+                    **kwargs,
                 )
             ):
-                return original_call(self, *args, **kwargs)
+                return original_call(self, *args, **kwargs_)
 
         pipe.__class__.__call__ = new_call
         pipe.__class__._is_cached = True
 
     if not shallow_patch:
-        apply_cache_on_transformer(pipe.transformer, **kwargs)
+        apply_cache_on_transformer(pipe.transformer)
 
     return pipe

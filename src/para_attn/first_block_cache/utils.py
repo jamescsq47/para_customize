@@ -235,7 +235,7 @@ def are_two_tensors_similar(t1, t2, *, threshold, parallelized=False):
 
 
 @torch.compiler.disable
-def apply_prev_hidden_states_residual(hidden_states, encoder_hidden_states):
+def apply_prev_hidden_states_residual(hidden_states, encoder_hidden_states=None):
     if is_taylorseer_enabled():
         hidden_states_residual = get_hidden_states_residual()
         assert hidden_states_residual is not None, "hidden_states_residual must be set before"
@@ -247,12 +247,14 @@ def apply_prev_hidden_states_residual(hidden_states, encoder_hidden_states):
         assert hidden_states_residual is not None, "hidden_states_residual must be set before"
         hidden_states = hidden_states_residual + hidden_states
 
-        encoder_hidden_states_residual = get_encoder_hidden_states_residual()
-        assert encoder_hidden_states_residual is not None, "encoder_hidden_states_residual must be set before"
-        encoder_hidden_states = encoder_hidden_states_residual + encoder_hidden_states
-
         hidden_states = hidden_states.contiguous()
-        encoder_hidden_states = encoder_hidden_states.contiguous()
+
+        if encoder_hidden_states is not None:
+            encoder_hidden_states_residual = get_encoder_hidden_states_residual()
+            assert encoder_hidden_states_residual is not None, "encoder_hidden_states_residual must be set before"
+            encoder_hidden_states = encoder_hidden_states_residual + encoder_hidden_states
+
+            encoder_hidden_states = encoder_hidden_states.contiguous()
 
     return hidden_states, encoder_hidden_states
 
