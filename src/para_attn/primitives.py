@@ -132,7 +132,15 @@ def get_assigned_chunk(
         idx = get_rank(group)
     world_size = get_world_size(group)
     total_size = tensor.shape[dim]
-    assert total_size % world_size == 0, f"tensor.shape[{dim}]={total_size} is not divisible by world_size={world_size}"
+    # assert total_size % world_size == 0, f"tensor.shape[{dim}]={total_size} is not divisible by world_size={world_size}"
+    # chunk_size = (total_size + world_size - 1) // world_size
+    # pad_size = chunk_size * world_size - total_size
+    # if pad_size > 0:
+    #     # 在 dim 维度后面 pad
+    #     pad_shape = list(tensor.shape)
+    #     pad_shape[dim] = pad_size
+    #     pad_tensor = torch.zeros(pad_shape, dtype=tensor.dtype, device=tensor.device)
+    #     tensor = torch.cat([tensor, pad_tensor], dim=dim)
     return tensor.chunk(world_size, dim=dim)[idx]
 
 

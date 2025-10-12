@@ -31,6 +31,7 @@ try:
     import torch.distributed.tensor.experimental._attention as torch_ring_attention
 except ImportError:
     torch_ring_attention = None
+from spas_sage_attn import customize_spas_sage_attn_meansim_cuda
 
 __all__ = [
     "UnifiedAttnMode",
@@ -113,10 +114,16 @@ def ulysses_attn_func(
     if attn_func is None:
         attn_func = F.scaled_dot_product_attention
 
-    out = attn_func(query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale)
+    if attn_func is customize_spas_sage_attn_meansim_cuda:
+        out, head_density = attn_func(query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, simthreshd1=0.1, cdfthreshd=0.9, return_sparsity=True)
 
-    out = _sdpa_output_all_to_all(out, mesh)
-    return out
+        out = _sdpa_output_all_to_all(out, mesh)
+        return out, head_density
+    else:
+        out = attn_func(query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale)
+
+        out = _sdpa_output_all_to_all(out, mesh)
+        return out
 
 
 @torch.compiler.assume_constant_result

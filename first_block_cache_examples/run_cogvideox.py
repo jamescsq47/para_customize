@@ -3,13 +3,13 @@ from diffusers import CogVideoXPipeline
 from diffusers.utils import export_to_video
 
 pipe = CogVideoXPipeline.from_pretrained(
-    "THUDM/CogVideoX-5b",
+    "/home/models/CogVideoX-5b",
     torch_dtype=torch.bfloat16,
 ).to("cuda")
 
 from para_attn.first_block_cache.diffusers_adapters import apply_cache_on_pipe
 
-apply_cache_on_pipe(pipe)
+apply_cache_on_pipe(pipe,residual_diff_threshold=0.08)
 
 # pipe.enable_model_cpu_offload()
 # pipe.enable_sequential_cpu_offload()
@@ -29,5 +29,9 @@ video = pipe(
     # generator=torch.Generator(device=pipe.device).manual_seed(42),
 ).frames[0]
 
-print("Saving video to cogvideox.mp4")
-export_to_video(video, "cogvideox.mp4", fps=8)
+print("Saving video to results/FBcache/cogvideox.mp4")
+export_to_video(video, "results/FBcache/cogvideox_apply0.08.mp4", fps=8)
+
+# origin: 3'25
+# 0.05: 2'01
+# 0.08: 1'29

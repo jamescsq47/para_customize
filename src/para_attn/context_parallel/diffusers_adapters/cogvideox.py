@@ -7,9 +7,10 @@ from diffusers import CogVideoXTransformer3DModel, DiffusionPipeline
 import para_attn.primitives as DP
 from para_attn.context_parallel import init_context_parallel_mesh
 from para_attn.para_attn_interface import UnifiedAttnMode
+from parallel_examples.cogvideo import NEW_CogVideoXTransformer3DModel
 
 
-def parallelize_transformer(transformer: CogVideoXTransformer3DModel, *, mesh=None):
+def parallelize_transformer(transformer: NEW_CogVideoXTransformer3DModel, *, mesh=None):
     if getattr(transformer, "_is_parallelized", False):
         return transformer
 
@@ -27,10 +28,13 @@ def parallelize_transformer(transformer: CogVideoXTransformer3DModel, *, mesh=No
         timestep: Union[int, float, torch.LongTensor],
         *args,
         image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        perm_idx: Optional[list] = None,
+        deperm_idx: Optional[list] = None,
         **kwargs,
     ):
         if isinstance(timestep, torch.Tensor) and timestep.ndim != 0 and timestep.shape[0] == hidden_states.shape[0]:
             timestep = DP.get_assigned_chunk(timestep, dim=0, group=batch_mesh)
+        # torch.Size([1, 41, 16, 60, 90]) torch.Size([1, 226, 4096]) 88888884 29 23
         hidden_states = DP.get_assigned_chunk(hidden_states, dim=0, group=batch_mesh)
         hidden_states = DP.get_assigned_chunk(hidden_states, dim=-2, group=seq_mesh)
         encoder_hidden_states = DP.get_assigned_chunk(encoder_hidden_states, dim=0, group=batch_mesh)
@@ -51,13 +55,18 @@ def parallelize_transformer(transformer: CogVideoXTransformer3DModel, *, mesh=No
             freqs_sin = get_rotary_emb_chunk(freqs_sin)
             image_rotary_emb = (freqs_cos, freqs_sin)
 
+        # print(hidden_states.shape, encoder_hidden_states.shape, image_rotary_emb[0].shape, image_rotary_emb[1].shape)
+        #torch.Size([6929, 64]) torch.Size([6847, 64])
+
         with UnifiedAttnMode(mesh):
-            output = original_forward(
+            output, all_head_density = original_forward(
                 hidden_states,
                 encoder_hidden_states,
                 *args,
                 timestep=timestep,
                 image_rotary_emb=image_rotary_emb,
+                perm_idx=perm_idx,
+                deperm_idx=deperm_idx,
                 **kwargs,
             )
 
@@ -65,8 +74,11 @@ def parallelize_transformer(transformer: CogVideoXTransformer3DModel, *, mesh=No
         sample = output[0]
         sample = DP.get_complete_tensor(sample, dim=-2, group=seq_mesh)
         sample = DP.get_complete_tensor(sample, dim=0, group=batch_mesh)
+
+        head_density = DP.get_complete_tensor(all_head_density, dim=-1, group=seq_mesh)
+        
         if return_dict:
-            return output.__class__(sample, *output[1:])
+            return output.__class__(sample, *output[1:]), head_density
         return (sample, *output[1:])
 
     transformer.forward = new_forward.__get__(transformer)

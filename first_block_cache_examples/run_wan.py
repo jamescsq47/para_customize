@@ -1,10 +1,14 @@
 import torch
+import diffusers
 from diffusers import WanPipeline
 
 # from diffusers.schedulers.scheduling_unipc_multistep import UniPCMultistepScheduler
 from diffusers.utils import export_to_video
+from wan import NEW_WanTransformer3DModel
+# Special for wan
+diffusers.models.WanTransformer3DModel = NEW_WanTransformer3DModel
 
-model_id = "Wan-AI/Wan2.1-T2V-1.3B-Diffusers"
+model_id = "/home/models/Wan2.1-T2V-14B-Diffusers"
 # model_id = "Wan-AI/Wan2.1-T2V-14B-Diffusers"
 pipe = WanPipeline.from_pretrained(model_id, torch_dtype=torch.bfloat16)
 
@@ -14,13 +18,15 @@ pipe.to("cuda")
 
 from para_attn.first_block_cache.diffusers_adapters import apply_cache_on_pipe
 
-apply_cache_on_pipe(pipe)
+# apply_cache_on_pipe(pipe,residual_diff_threshold=0.08)
 
 # Enable memory savings
 # pipe.enable_model_cpu_offload()
 # pipe.enable_vae_tiling()
 
 # pipe.transformer = torch.compile(pipe.transformer, mode="max-autotune-no-cudagraphs")
+
+import ipdb;ipdb.set_trace()
 
 video = pipe(
     prompt="An astronaut dancing vigorously on the moon with earth flying past in the background, hyperrealistic",
