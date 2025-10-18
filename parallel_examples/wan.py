@@ -17,6 +17,7 @@ import torch.distributed as dist
 # from paroattention.quant import per_warp_int8 as per_warp_int8_cuda
 # import sageattention._qattn_sm80 as qattn_sage
 from spas_sage_attn import customize_spas_sage_attn_meansim_cuda
+# from spas_sage_attn import block_sparse_sage2_attn_cuda
 from paroattention import paroattn_qk_int8_pv_fp16_cuda
 import torch.cuda as cuda
 # import plotly.subplots as sp
@@ -231,15 +232,14 @@ class PARO_PARALLEL_WanAttnProcessor2_0:
             sparse = all_to_all_4D(sparse, scatter_idx=1, gather_idx=2, group=ulysses_pg)
 
         cuda.synchronize()
-
         rank = dist.get_rank()
         ulysses_world_size = dist.get_world_size(ulysses_pg) if ulysses_pg is not None else 1
         ring_world_size = dist.get_world_size(ring_pg) if ring_pg is not None else 1
         batch_size, nheads, seqlen, d = query.shape
 
         original_seqlen = seqlen
-        if seqlen % 64 != 0:
-            pad_length = 64 - (seqlen % 64)
+        if seqlen % (64*ring_world_size) != 0:
+            pad_length = (64*ring_world_size) - (seqlen % (64*ring_world_size))
             query = F.pad(query, (0, 0, 0, pad_length), "constant", 0)
             key = F.pad(key, (0, 0, 0, pad_length), "constant", 0)
             value = F.pad(value, (0, 0, 0, pad_length), "constant", 0)
@@ -269,6 +269,7 @@ class PARO_PARALLEL_WanAttnProcessor2_0:
 
                 
         if ring_world_size == 1:
+            # print(sparse.float().sum())
             hidden_states = paroattn_qk_int8_pv_fp16_cuda(query, key, value, sparse=sparse)
             # print(f"{dist.get_rank()},{sparse.sum()},{sparse.shape}")
         # hidden_states_real = F.scaled_dot_product_attention(
@@ -299,11 +300,10 @@ class PARO_PARALLEL_WanAttnProcessor2_0:
         cuda.synchronize()
         total_time = self.events['total_start'].elapsed_time(self.events['total_end'])
         self.time_accum['total'] = total_time
-        print(f"rank {torch.cuda.current_device()}, total_time: {total_time} ms")
+        # print(f"rank {torch.cuda.current_device()}, total_time: {total_time} ms")
 
-        # if torch.cuda.current_device() == 1 or torch.cuda.current_device() == 3:
-        #     print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
-        #     prof.export_chrome_trace(f"rank_{torch.cuda.current_device()}_ulysses{ulysses_world_size}_ring_{ring_world_size}_e2e_test.json")  # 可选：导出火焰图
+        # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+        # prof.export_chrome_trace(f"rank_{torch.cuda.current_device()}_ulysses{ulysses_world_size}_ring_{ring_world_size}_onlyhead.json")  # 可选：导出火焰图
 
         
         hidden_states = hidden_states.transpose(1, 2).flatten(2, 3)
@@ -927,8 +927,6 @@ class PARO_WanTransformerBlock(nn.Module):
         attn_output = self.attn2(hidden_states=norm_hidden_states, encoder_hidden_states=encoder_hidden_states)
         hidden_states = hidden_states + attn_output
 
-        print(f"--------")
-        print(f"{cuda.current_device()},{sparse.float().sum()}")
         # 3. Feed-forward
         norm_hidden_states = (self.norm3(hidden_states.float()) * (1 + c_scale_msa) + c_shift_msa).type_as(
             hidden_states

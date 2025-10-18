@@ -212,6 +212,11 @@ def hybrid_permute_v4(
                 head_groups[gid].append(idx)
                 head_group_sums[gid] += float(w)
                 head_group_counts[gid] += 1
+
+            # 对每个组内的 heads 按权重从小到大排序
+            for g in range(ulysses_degree):
+                head_groups[g] = sorted(head_groups[g], key=lambda idx: head_weights[idx].item())
+
             head_new_order = [i for g in head_groups for i in g]
             head_perm_idx = torch.tensor(head_new_order, device=sparse.device, dtype=torch.long)
             head_deperm_idx = torch.empty_like(head_perm_idx)
@@ -339,6 +344,7 @@ def hybrid_permute_v4(
                 new_col_deperm_idx[i][new_col_perm_idx[i]] = torch.arange(new_col_perm_idx.shape[1], device=new_col_perm_idx.device)
 
             sparse_final = sparse_reordered.index_select(1, row_perm_idx_groups_sorted.view(-1)).index_select(2, col_perm_idx_groups_sorted.view(-1)).contiguous()
+            # sparse_final = sparse_reordered
         
         return sparse_final, head_perm_idx, new_row_perm_idx, new_col_perm_idx, transpose_matrix_q, transpose_matrix_k, head_deperm_idx, new_row_deperm_idx, new_col_deperm_idx
 
@@ -566,18 +572,17 @@ parallelize_pipe_paro(
 
 
 # hybrid
-sparse_data = torch.load("/mnt/public/ns-t-te-b905754427352261-427-bk/fs/home/xieruiqi/diffuser-dev520/examples/wan/logs/calib_data/rebuttal_720p/sparse_expanded.pth", map_location='cpu', weights_only=True) # 0.414
+sparse_data = torch.load("/mnt/public/ns-t-te-b905754427352261-427-bk/fs/home/xieruiqi/diffuser-dev520/examples/wan/logs/calib_data/rebuttal_720p/sparse_expanded.pth", map_location='cpu', weights_only=True) # 0.4141
 # sparse_data = torch.load("/mnt/public/ns-t-te-b905754427352261-427-bk/fs/home/xieruiqi/diffuser-dev520/examples/wan/logs/calib_data/720p/sparse_plan_expanded.pth", map_location='cpu', weights_only=True) # 0.61
 sparse = sparse_data['sparse'][0].cuda()  # [40, 40, 1182, 1182]
+# sparse = torch.load("/mnt/public/chensiqi/sparse_random2.pth", map_location='cpu', weights_only=True).to(sparse.device)
 
 H, W = sparse.shape[-2], sparse.shape[-1]
-pad_h = (sp_ring_degree - H % sp_ring_degree) if H % sp_ring_degree != 0 else 0
-pad_w = (sp_ring_degree - W % sp_ring_degree) if W % sp_ring_degree != 0 else 0
+pad_h = (sp_degree - H % sp_degree) if H % sp_degree != 0 else 0
+pad_w = (sp_degree - W % sp_degree) if W % sp_degree != 0 else 0
 if pad_h != 0 or pad_w != 0:
     sparse = torch.nn.functional.pad(sparse, (0, pad_w, 0, pad_h), "constant", 0)
-
-# # let sparse = 1
-# sparse = torch.ones_like(sparse)
+print(sparse.shape)
 
 head_perm_idx = None
 head_deperm_idx = None
