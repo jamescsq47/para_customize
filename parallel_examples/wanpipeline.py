@@ -608,7 +608,7 @@ class WanPipeline_NEW(DiffusionPipeline):
                 timestep = t.expand(latents.shape[0])
 
                 if head_density is not None:
-                    if imbalance_ratio(head_density,num_groups=8) > 1.0:
+                    if imbalance_ratio(head_density,num_groups=8) > 1.1:
                         _,_,_,perm_idx,deperm_idx = greedy_partition_and_rearrange_ulysses8_multi(head_density, perm_idx, deperm_idx, num_groups=8)
                         count += 1
 
@@ -635,7 +635,6 @@ class WanPipeline_NEW(DiffusionPipeline):
                 if head_density is not None:
                     if dist.get_rank() == 0:
                         print(f"rank{dist.get_rank()}, timestep:{i}, count:{count}, imbalance ratio: {imbalance_ratio(head_density,num_groups=8)}")
-                        # import ipdb; ipdb.set_trace()
                 total_time = self.transformer.get_total_attention_time()
                 total_time_list.append(total_time)
                 time += total_time

@@ -132,7 +132,17 @@ def get_assigned_chunk(
         idx = get_rank(group)
     world_size = get_world_size(group)
     total_size = tensor.shape[dim]
-    # assert total_size % world_size == 0, f"tensor.shape[{dim}]={total_size} is not divisible by world_size={world_size}"
+    # # 计算能被 world_size 整除的最大尺寸
+    # divisible_size = (total_size // world_size) * world_size
+    
+    # # 如果有余数，截断 tensor
+    # if divisible_size < total_size:
+    #     # 构造 slice 对象，在 dim 维度上截取 [0:divisible_size]
+    #     slices = [slice(None)] * tensor.ndim
+    #     slices[dim] = slice(0, divisible_size)
+    #     tensor = tensor[tuple(slices)]
+    
+    assert total_size % world_size == 0, f"tensor.shape[{dim}]={total_size} is not divisible by world_size={world_size}"
     # chunk_size = (total_size + world_size - 1) // world_size
     # pad_size = chunk_size * world_size - total_size
     # if pad_size > 0:

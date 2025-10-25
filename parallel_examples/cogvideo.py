@@ -703,6 +703,7 @@ class NEW_CogVideoXTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin,
         encoder_hidden_states = hidden_states[:, :text_seq_length]
         hidden_states = hidden_states[:, text_seq_length:]
 
+        print(f"before:{hidden_states.shape},{encoder_hidden_states.shape}")
         # 3. Transformer blocks
         total_time = 0.0
         all_head_density = []
@@ -745,6 +746,7 @@ class NEW_CogVideoXTransformer3DModel(ModelMixin, ConfigMixin, PeftAdapterMixin,
         p = self.config.patch_size
         p_t = self.config.patch_size_t
 
+        print(f"after:{hidden_states.shape},{encoder_hidden_states.shape}")
         if p_t is None:
             output = hidden_states.reshape(batch_size, num_frames, height // p, width // p, -1, p, p)
             output = output.permute(0, 1, 4, 2, 5, 3, 6).flatten(5, 6).flatten(3, 4)

@@ -238,8 +238,8 @@ class PARO_PARALLEL_WanAttnProcessor2_0:
         batch_size, nheads, seqlen, d = query.shape
 
         original_seqlen = seqlen
-        if seqlen % (64*ring_world_size) != 0:
-            pad_length = (64*ring_world_size) - (seqlen % (64*ring_world_size))
+        if seqlen % (64*ulysses_world_size) != 0:
+            pad_length = (64*ulysses_world_size) - (seqlen % (64*ulysses_world_size))
             query = F.pad(query, (0, 0, 0, pad_length), "constant", 0)
             key = F.pad(key, (0, 0, 0, pad_length), "constant", 0)
             value = F.pad(value, (0, 0, 0, pad_length), "constant", 0)
@@ -252,21 +252,31 @@ class PARO_PARALLEL_WanAttnProcessor2_0:
 
             # print(f"{rank},new_row_perm_idx: {new_row_perm_idx[rank%ring_world_size]}, {new_row_perm_idx[rank%ring_world_size].shape}, q shape: {query.shape}")
             query=query.index_select(0, new_row_perm_idx[rank%ring_world_size]).contiguous()
-            dist.all_to_all_single(query,query,transpose_matrix_q.T[rank%ring_world_size].tolist(),transpose_matrix_q[rank%ring_world_size].tolist(), group=ring_pg, async_op=True) #, async_op=True
+            dist.all_to_all_single(query,query,transpose_matrix_q.T[rank%ring_world_size].tolist(),transpose_matrix_q[rank%ring_world_size].tolist(), group=ring_pg) #, async_op=True
 
 
             key=key.index_select(0, new_col_perm_idx[rank%ring_world_size]).contiguous()
-            dist.all_to_all_single(key,key,transpose_matrix_k.T[rank%ring_world_size].tolist(), transpose_matrix_k[rank%ring_world_size].tolist(), group=ring_pg, async_op=True)
+            dist.all_to_all_single(key,key,transpose_matrix_k.T[rank%ring_world_size].tolist(), transpose_matrix_k[rank%ring_world_size].tolist(), group=ring_pg)
 
             value=value.index_select(0, new_col_perm_idx[rank%ring_world_size]).contiguous()
-            dist.all_to_all_single(value,value,transpose_matrix_k.T[rank%ring_world_size].tolist(),transpose_matrix_k[rank%ring_world_size].tolist(), group=ring_pg, async_op=True)
+            dist.all_to_all_single(value,value,transpose_matrix_k.T[rank%ring_world_size].tolist(),transpose_matrix_k[rank%ring_world_size].tolist(), group=ring_pg)
 
             query=query.transpose(0,2).reshape(batch_size, nheads, seqlen, d).contiguous()
             key=key.transpose(0,2).reshape(batch_size, nheads, seqlen, d).contiguous()
             value=value.transpose(0,2).reshape(batch_size, nheads, seqlen, d).contiguous()
-
             cuda.synchronize()
 
+        elif new_row_perm_idx is not None:
+            query=query.reshape(batch_size, nheads, seqlen//64, 64, d).transpose(0,2)
+            key=key.reshape(batch_size, nheads, seqlen//64, 64, d).transpose(0,2)
+            value=value.reshape(batch_size, nheads, seqlen//64, 64, d).transpose(0,2)
+            query=query.index_select(0, new_row_perm_idx[rank%ring_world_size]).contiguous()
+            key=key.index_select(0, new_col_perm_idx[rank%ring_world_size]).contiguous()
+            value=value.index_select(0, new_col_perm_idx[rank%ring_world_size]).contiguous()
+            query=query.transpose(0,2).reshape(batch_size, nheads, seqlen, d).contiguous()
+            key=key.transpose(0,2).reshape(batch_size, nheads, seqlen, d).contiguous()
+            value=value.transpose(0,2).reshape(batch_size, nheads, seqlen, d).contiguous()
+            cuda.synchronize()
                 
         if ring_world_size == 1:
             # print(sparse.float().sum())
@@ -281,8 +291,13 @@ class PARO_PARALLEL_WanAttnProcessor2_0:
             hidden_states = ring_flash_attn_func(query, key, value, group=ring_pg, attn_type=AttnType.PARO, attn_processor=None, sparse=sparse)
         
         if transpose_matrix_q is not None:
+            # print(f"{rank}, hidden states before transpose shape: {hidden_states.shape}, transpose_matrix_q: {transpose_matrix_q[rank%ring_world_size]},{transpose_matrix_q[rank%ring_world_size].shape}, new_row_deperm_idx: {new_row_deperm_idx[rank%ring_world_size].shape}")
             hidden_states=hidden_states.reshape(batch_size, nheads, seqlen//64, 64, d).transpose(0,2).contiguous()
-            dist.all_to_all_single(hidden_states,hidden_states,transpose_matrix_q[rank%ring_world_size].tolist(),transpose_matrix_q.T[rank%ring_world_size].tolist(), group=ring_pg, async_op=True)
+            dist.all_to_all_single(hidden_states,hidden_states,transpose_matrix_q[rank%ring_world_size].tolist(),transpose_matrix_q.T[rank%ring_world_size].tolist(), group=ring_pg)
+            hidden_states=hidden_states.index_select(0, new_row_deperm_idx[rank%ring_world_size]).transpose(0,2).reshape(batch_size, nheads, seqlen, d).contiguous()
+            
+        elif new_row_deperm_idx is not None:
+            hidden_states=hidden_states.reshape(batch_size, nheads, seqlen//64, 64, d).transpose(0,2).contiguous()
             hidden_states=hidden_states.index_select(0, new_row_deperm_idx[rank%ring_world_size]).transpose(0,2).reshape(batch_size, nheads, seqlen, d).contiguous()
 
         cuda.synchronize()

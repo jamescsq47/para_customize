@@ -360,7 +360,7 @@ def hybrid_permute_v4(
         new_col_deperm_idx_list = []
 
         for block in range(sparse.shape[0]):
-            sparse_final, head_perm_idx, new_row_perm_idx, new_col_perm_idx, transpose_matrix_q, transpose_matrix_k, head_deperm_idx, new_row_deperm_idx, new_col_deperm_idx = hybrid_permute_v4(sparse[block], ulysses_degree, ring_degree)
+            sparse_final, head_perm_idx, new_row_perm_idx, new_col_perm_idx, transpose_matrix_q, transpose_matrix_k, head_deperm_idx, new_row_deperm_idx, new_col_deperm_idx = hybrid_permute_v4(sparse[block], ulysses_degree, ring_degree,reward)
             sparse_final_list.append(sparse_final)
             head_perm_idx_list.append(head_perm_idx)
             new_row_perm_idx_list.append(new_row_perm_idx)
@@ -541,8 +541,8 @@ from para_attn.context_parallel import init_context_parallel_mesh
 from para_attn.context_parallel.diffusers_adapters import parallelize_pipe_paro
 
 
-sp_ulysses_degree = 4
-sp_ring_degree = 2
+sp_ulysses_degree = 2
+sp_ring_degree = 4
 
 ulysses_pg, ring_pg, dp_degree, sp_degree = set_seq_parallel_pg(
     sp_ulysses_degree,
@@ -597,8 +597,11 @@ if dist.get_rank() == 0:
     for block in range(sparse.shape[0]):
         print(f"{block}, imbalance ratio:, {hybrid_imbalance_ratio(sparse[block], sp_ulysses_degree, sp_ring_degree)}")
 
-# sparse, head_perm_idx, new_row_perm_idx, new_col_perm_idx, transpose_matrix_q, transpose_matrix_k, head_deperm_idx, new_row_deperm_idx, new_col_deperm_idx = hybrid_permute_v4(sparse,sp_ulysses_degree,sp_ring_degree,2)
-sparse, _, _, _, _, _, _, _, _ = hybrid_permute_v4(sparse,sp_ulysses_degree,sp_ring_degree,20)
+sparse, _, new_row_perm_idx, new_col_perm_idx, _, _, _, new_row_deperm_idx, new_col_deperm_idx = hybrid_permute_v4(sparse,sp_ulysses_degree,sp_ring_degree,2)
+
+# print(f"shape of output: {sparse.shape}, head_perm_idx: {head_perm_idx[0].shape if head_perm_idx is not None else None}, new_row_perm_idx: {new_row_perm_idx[0].shape if new_row_perm_idx is not None else None}, new_col_perm_idx: {new_col_perm_idx[0].shape if new_col_perm_idx is not None else None}, transpose_matrix_q: {transpose_matrix_q[0] if transpose_matrix_q is not None else None}, transpose_matrix_k: {transpose_matrix_k[0] if transpose_matrix_k is not None else None}, head_deperm_idx: {head_deperm_idx[0].shape if head_deperm_idx is not None else None}, new_row_deperm_idx: {new_row_deperm_idx[0].shape if new_row_deperm_idx is not None else None}, new_col_deperm_idx: {new_col_deperm_idx[0].shape if new_col_deperm_idx is not None else None}")
+
+# sparse, _, _, _, _, _, _, _, _ = hybrid_permute_v4(sparse,sp_ulysses_degree,sp_ring_degree,2)
 
 if dist.get_rank() == 0:
     for block in range(sparse.shape[0]):
